@@ -8,38 +8,42 @@ import { DeviceService } from "@/services/device.service";
  * Unprotected route — upserts the device state for a given profile.
  * The profile ID is sent in the request body (not from JWT).
  * This allows IoT devices / embedded systems to push data without authentication.
+ *
+ * Power & Energy are calculated on the route layer:
+ *   power (W)  = voltage × current
+ *   energy (kWh) = power × (1/3600)  — per-second energy contribution
+ * Frequency defaults to 50 Hz if not provided.
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { profile, voltage, current, power, frequency, energy, state } = body;
+    const { profile, voltage, current, frequency, state } = body;
 
     // Validate required fields
     if (!profile) {
       return fail({ error: "Profile ID is required" });
     }
 
-    if (
-      voltage === undefined ||
-      current === undefined ||
-      power === undefined ||
-      frequency === undefined ||
-      energy === undefined ||
-      state === undefined
-    ) {
+    if (voltage === undefined || current === undefined || state === undefined) {
       return fail({
-        error:
-          "All device metrics (voltage, current, power, frequency, energy, state) are required",
+        error: "Required fields: voltage, current, state",
       });
     }
 
+    // ── Route-layer calculations ──────────────────────────────
+    const v = Number(voltage);
+    const i = Number(current);
+    const p = v * i; // power (Watts)
+    const e = p * (1 / 3600); // energy (kWh per second)
+    const f = frequency !== undefined ? Number(frequency) : 50; // fallback 50 Hz
+
     const result = await DeviceService.updateState({
       profile,
-      voltage: Number(voltage),
-      current: Number(current),
-      power: Number(power),
-      frequency: Number(frequency),
-      energy: Number(energy),
+      voltage: v,
+      current: i,
+      power: p,
+      frequency: f,
+      energy: e,
       state: Boolean(state),
     });
 
