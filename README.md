@@ -40,26 +40,43 @@ The system is designed for Bangladesh's electrical grid (220–240 V, 50 Hz) but
 
 ## Architecture
 
-```
-┌─────────────────┐         ┌──────────────────────────────────────┐
-│   IoT Device    │  HTTP   │         Next.js 16 App               │
-│  (ESP32 + PZEM) │ ──────▶ │                                      │
-│                 │   POST  │  ┌──────────┐  ┌──────────────────┐  │
-│  - Voltage      │  /api/  │  │  Auth     │  │  Dashboard UI    │  │
-│  - Current      │  device/│  │  (JWT)    │  │  - Gauges        │  │
-│  - Power        │  state/ │  │           │  │  - Charts        │  │
-│  - Frequency    │  update │  │  /login   │  │  - Safety Banner │  │
-│  - Energy       │         │  │  /signup  │  │  - Insights      │  │
-│                 │         │  │  /me      │  └──────────────────┘  │
-│  Relay Control  │ ◀────── │  └──────────┘                        │
-│  (ON/OFF)       │  Realtime│                                      │
-└─────────────────┘  Sub    │  ┌──────────────────────────────────┐│
-                      via    │  │  Supabase (PostgreSQL)           ││
-                    Supabase │  │  - profile                       ││
-                             │  │  - device_states (1 row/prof)    ││
-                             │  │  - device_history (append log)   ││
-                             │  └──────────────────────────────────┘│
-                             └──────────────────────────────────────┘
+```mermaid
+flowchart LR
+
+classDef iot fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px;
+classDef next fill:#E3F2FD,stroke:#1565C0,stroke-width:2px;
+classDef auth fill:#F3E5F5,stroke:#8E24AA;
+classDef dash fill:#FFF3E0,stroke:#FB8C00;
+classDef db fill:#E0F2F1,stroke:#00897B;
+
+subgraph IoT["📟 IoT Device"]
+direction TB
+Sensor["ESP32 + PZEM<br/><br/>• Voltage<br/>• Current<br/>• Power<br/>• Frequency<br/>• Energy"]
+Relay["Relay<br/>ON / OFF"]
+end
+
+subgraph Next["⚛️ Next.js 16"]
+direction TB
+
+Auth["🔐 Auth API<br/>/login<br/>/signup<br/>/me"]
+
+Dashboard["📊 Dashboard<br/>Gauges<br/>Charts<br/>Safety<br/>Insights"]
+
+Supabase["🗄️ Supabase<br/><br/>profile<br/>device_states<br/>device_history"]
+
+Auth --> Dashboard
+Dashboard --> Supabase
+
+end
+
+Sensor -->|"HTTP POST<br/>/api/device/state/update"| Next
+Supabase -.->|"Realtime"| Relay
+
+class Sensor,Relay iot
+class Next next
+class Auth auth
+class Dashboard dash
+class Supabase db
 ```
 
 ### Data Flow
