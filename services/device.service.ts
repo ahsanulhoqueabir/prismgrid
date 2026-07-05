@@ -7,6 +7,10 @@ import type {
   InsertDeviceHistoryPayload,
   HistoryQueryParams,
 } from "@/types/db/device.types";
+import type {
+  RelayCommand,
+  CreateRelayCommandPayload,
+} from "@/types/db/relay.types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ServiceResult<T = any> =
@@ -166,6 +170,112 @@ export class DeviceService {
       }
 
       return success(data as DeviceHistory);
+    } catch (err) {
+      return error((err as Error).message || "An unknown error occurred");
+    }
+  }
+
+  /**
+   * Create a relay command (toggle ON/OFF).
+   * Upserts so that only one pending command exists per profile at a time.
+   * If there's already a pending command with the same state, it's a no-op.
+   * Used by the protected web UI endpoint.
+   */
+  static async setRelayCommand(
+    payload: CreateRelayCommandPayload,
+  ): Promise<ServiceResult<RelayCommand>> {
+    try {
+      const supabase = getSupabaseServerClient();
+
+      // First, check if there's already a pending command with the same state
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existing } = await (supabase as any)
+        .from("relay_commands")
+        .select("*")
+        .eq("profile", payload.profile)
+        .eq("status", "pending")
+        .maybeSingle();
+
+      if (existing && existing.state === payload.state) {
+        // Same command already pending — return it as-is
+        return success(existing as RelayCommand);
+      }
+
+      // Delete any existing pending command for this profile
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from("relay_commands")
+        .delete()
+        .eq("profile", payload.profile)
+        .eq("status", "pending");
+
+      // Insert the new relay command
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: sbError } = await (supabase as any)
+        .from("relay_commands")
+        .insert({
+          profile: payload.profile,
+          state: payload.state,
+          status: "pending",
+        })
+        .select("*")
+        .single();
+
+      if (sbError) {
+        return error(sbError.message);
+      }
+
+      return success(data as RelayCommand);
+    } catch (err) {
+      return error((err as Error).message || "An unknown error occurred");
+    }
+  }
+
+  /**
+   * Poll for a pending relay command for a given profile.
+   * If a pending command exists, it is atomically marked as "executed"
+   * and returned so the caller (ESP32) can act on it.
+   * Used by the unprotected ESP32 polling endpoint.
+   */
+  static async pollRelayCommand(
+    profile: string,
+  ): Promise<ServiceResult<RelayCommand | null>> {
+    try {
+      const supabase = getSupabaseServerClient();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: sbError } = await (supabase as any)
+        .from("relay_commands")
+        .select("*")
+        .eq("profile", profile)
+        .eq("status", "pending")
+        .maybeSingle();
+
+      if (sbError) {
+        return error(sbError.message);
+      }
+
+      if (!data) {
+        // No pending command
+        return success(null);
+      }
+
+      // Atomically mark as executed
+      const now = new Date().toISOString();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: updated, error: updateError } = await (supabase as any)
+        .from("relay_commands")
+        .update({ status: "executed", executed_at: now })
+        .eq("id", data.id)
+        .eq("status", "pending") // optimistic lock
+        .select("*")
+        .single();
+
+      if (updateError) {
+        return error(updateError.message);
+      }
+
+      return success(updated as RelayCommand);
     } catch (err) {
       return error((err as Error).message || "An unknown error occurred");
     }

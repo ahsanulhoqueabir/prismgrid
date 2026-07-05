@@ -173,27 +173,23 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [fetchHistory]);
 
-  // Toggle relay state
+  // Toggle relay state — sends command to relay/toggle endpoint
+  // ESP32 will pick up the pending command on its next poll
   const handleToggleState = async () => {
     if (!user?.id || !deviceState || isTogglingState) return;
     setIsTogglingState(true);
     try {
       const nextState = !deviceState.state;
-      const response = await api_client.post("/device/state/update", {
-        profile: user.id,
+      const response = await api_client.post("/device/relay/toggle", {
         state: nextState,
-        voltage: deviceState.voltage,
-        current: deviceState.current,
-        power: deviceState.power,
-        frequency: deviceState.frequency,
-        energy: deviceState.energy,
       });
 
       if (response.data?.success) {
-        setDeviceState(response.data.data);
+        // Optimistically update the UI state
+        setDeviceState((prev) => (prev ? { ...prev, state: nextState } : prev));
       }
     } catch (err) {
-      console.error("Error toggling device state:", err);
+      console.error("Error toggling relay:", err);
     } finally {
       setIsTogglingState(false);
     }
