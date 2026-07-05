@@ -43,19 +43,19 @@ sequenceDiagram
     ESP->>API: POST /api/device/state/update {voltage, current, state}
     Note over ESP,API: Every 1 second (unprotected)
     API->>DB: UPSERT device_states
-    API-->>ESP: ✅ State updated
+    API-->>ESP: State updated
 
     ESP->>API: POST /api/device/history/insert {voltage, current, state}
     Note over ESP,API: Every 30 seconds (unprotected)
     API->>DB: INSERT device_history
-    API-->>ESP: ✅ History recorded
+    API-->>ESP: History recorded
 
     Note over Web,DB: ─── Relay Control Flow (Web → ESP32) ───
 
     Web->>API: POST /api/device/relay/toggle {state: true}
     Note over Web,API: Protected (JWT required)
     API->>DB: INSERT relay_commands (pending)
-    API-->>Web: ✅ Command created
+    API-->>Web: Command created
 
     ESP->>API: GET /api/device/relay/pending?profile=...
     Note over ESP,API: Every 1 second (after state update)
