@@ -176,9 +176,9 @@ export class DeviceService {
   }
 
   /**
-   * Create a relay command (toggle ON/OFF).
-   * Upserts so that only one pending command exists per profile at a time.
-   * If there's already a pending command with the same state, it's a no-op.
+   * Create a relay command (toggle ON/OFF) via Supabase RPC.
+   * All logic (check → delete → insert) runs in a single DB transaction,
+   * reducing round-trip time.
    * Used by the protected web UI endpoint.
    */
   static async setRelayCommand(
@@ -187,39 +187,14 @@ export class DeviceService {
     try {
       const supabase = getSupabaseServerClient();
 
-      // First, check if there's already a pending command with the same state
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existing } = await (supabase as any)
-        .from("relay_commands")
-        .select("*")
-        .eq("profile", payload.profile)
-        .eq("status", "pending")
-        .maybeSingle();
-
-      if (existing && existing.state === payload.state) {
-        // Same command already pending — return it as-is
-        return success(existing as RelayCommand);
-      }
-
-      // Delete any existing pending command for this profile
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from("relay_commands")
-        .delete()
-        .eq("profile", payload.profile)
-        .eq("status", "pending");
-
-      // Insert the new relay command
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error: sbError } = await (supabase as any)
-        .from("relay_commands")
-        .insert({
-          profile: payload.profile,
-          state: payload.state,
-          status: "pending",
-        })
-        .select("*")
-        .single();
+      const { data, error: sbError } = await (supabase as any).rpc(
+        "upsert_relay_command",
+        {
+          p_profile: payload.profile,
+          p_state: payload.state,
+        },
+      );
 
       if (sbError) {
         return error(sbError.message);
