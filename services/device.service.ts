@@ -233,8 +233,9 @@ export class DeviceService {
 
   /**
    * Poll for a pending relay command for a given profile.
-   * If a pending command exists, it is atomically marked as "executed"
-   * and returned so the caller (ESP32) can act on it.
+   * Returns the pending command WITHOUT marking it as executed.
+   * The ESP32 will execute the command and then call acknowledgeRelayCommand()
+   * to confirm execution.
    * Used by the unprotected ESP32 polling endpoint.
    */
   static async pollRelayCommand(
@@ -260,22 +261,43 @@ export class DeviceService {
         return success(null);
       }
 
-      // Atomically mark as executed
+      return success(data as RelayCommand);
+    } catch (err) {
+      return error((err as Error).message || "An unknown error occurred");
+    }
+  }
+
+  /**
+   * Acknowledge that a relay command has been executed by the ESP32.
+   * Atomically marks the command as "executed" with an optimistic lock
+   * (only updates if still "pending").
+   * Used by the unprotected ESP32 acknowledge endpoint.
+   */
+  static async acknowledgeRelayCommand(
+    commandId: string,
+  ): Promise<ServiceResult<RelayCommand>> {
+    try {
+      const supabase = getSupabaseServerClient();
       const now = new Date().toISOString();
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: updated, error: updateError } = await (supabase as any)
+      const { data, error: sbError } = await (supabase as any)
         .from("relay_commands")
         .update({ status: "executed", executed_at: now })
-        .eq("id", data.id)
+        .eq("id", commandId)
         .eq("status", "pending") // optimistic lock
         .select("*")
         .single();
 
-      if (updateError) {
-        return error(updateError.message);
+      if (sbError) {
+        return error(sbError.message);
       }
 
-      return success(updated as RelayCommand);
+      if (!data) {
+        return error("Relay command not found or already acknowledged");
+      }
+
+      return success(data as RelayCommand);
     } catch (err) {
       return error((err as Error).message || "An unknown error occurred");
     }
