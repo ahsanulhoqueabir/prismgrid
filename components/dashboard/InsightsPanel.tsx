@@ -42,7 +42,7 @@ export const InsightsPanel: React.FC<InsightsPanelProps> = ({ analysis }) => {
                 </div>
                 <div>
                   <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">
-                    Projected Cost (৳ 8.5/kWh)
+                    Projected Cost (৳ 100/kWh)
                   </p>
                   <p className="text-sm font-extrabold text-zinc-800 dark:text-white">
                     ৳ {analysis.estimatedCost.toFixed(2)}

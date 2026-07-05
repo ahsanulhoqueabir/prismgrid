@@ -216,7 +216,7 @@ export interface DeviceAnalysis {
   estimatedCost: number;
 }
 
-const UNIT_PRICE_BDT = 8.5; // BDT rate per kWh unit
+const UNIT_PRICE_BDT = 100; // BDT rate per kWh unit
 
 /**
  * Compile insights and analysis from device history data.
